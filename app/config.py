@@ -11,3 +11,5 @@ DATA_DIR = ROOT / "data"
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ALLOWED_USER_IDS = {int(x) for x in os.getenv("ALLOWED_USER_IDS", "").replace(" ", "").split(",") if x}
 SQLITE_PATH = Path(os.getenv("SQLITE_PATH", DATA_DIR / "dislocation.sqlite3"))
+# Адрес Mini App с картой, например https://disloc.alfa-1.ru/map. Пусто — кнопки карты нет.
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")

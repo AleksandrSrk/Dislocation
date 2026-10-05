@@ -55,9 +55,12 @@ class Dislocation:
 class Storage:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        # check_same_thread=False: FastAPI выполняет запросы в пуле потоков
+        self.conn = sqlite3.connect(path, check_same_thread=False, timeout=10)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        # WAL: бот пишет, API читает ту же базу без взаимных блокировок
+        self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.executescript(SCHEMA)
 
     @staticmethod

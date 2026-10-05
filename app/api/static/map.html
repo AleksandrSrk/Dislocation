@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>Карта маршрута</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #fff);
+    --text: var(--tg-theme-text-color, #111);
+    --hint: var(--tg-theme-hint-color, #888);
+    --accent: var(--tg-theme-button-color, #2481cc);
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+               font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #panel { padding: 10px 14px; border-bottom: 1px solid rgba(127,127,127,.25); }
+  #panel b { font-size: 15px; }
+  #panel .row { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
+  #panel .hint { color: var(--hint); }
+  .ok { color: #2e9e44; } .bad { color: #d64545; }
+  #map { position: absolute; left: 0; right: 0; bottom: 0; top: var(--panel-h, 92px); }
+  #msg { padding: 24px 16px; text-align: center; color: var(--hint); }
+</style>
+</head>
+<body>
+<div id="panel"><div id="msg">Загрузка…</div></div>
+<div id="map"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const panel = document.getElementById("panel");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function fail(text) { panel.innerHTML = `<div id="msg">${esc(text)}</div>`; }
+
+async function main() {
+  const id = new URLSearchParams(location.search).get("id");
+  if (!tg || !tg.initData) return fail("Открой карту из бота в Telegram.");
+  if (!id) return fail("Не указана накладная.");
+  const resp = await fetch(`/api/waybill/${encodeURIComponent(id)}`, { headers: { "X-Init-Data": tg.initData } });
+  if (!resp.ok) return fail(resp.status === 403 ? "Нет доступа." : "Накладная не найдена.");
+  const d = await resp.json();
+
+  const s = d.status;
+  let margin = "";
+  if (s && s.margin_days !== null) {
+    margin = s.margin_days >= 0
+      ? `<span class="ok">опережаем на ~${Math.round(s.margin_days)} сут</span>`
+      : `<span class="bad">отстаём на ~${Math.round(-s.margin_days)} сут</span>`;
+  }
+  panel.innerHTML = `
+    <b>${esc(d.number)}</b> · ${esc(d.from)} → ${esc(d.to)}
+    <div class="row">
+      <span>Всего ${d.total_km} км</span>
+      ${s ? `<span>Осталось <b>${s.remaining_km}</b> км</span>` : ""}
+      <span class="hint">срок до ${esc(d.deadline)}</span>
+    </div>
+    ${s ? `<div class="row"><span>📍 ${esc(s.station)}, ${esc(s.operated_at)} МСК</span>
+      ${s.eta ? `<span>прогноз ~${esc(s.eta)}</span>` : ""} ${margin}</div>` : ""}`;
+  document.documentElement.style.setProperty("--panel-h", panel.offsetHeight + "px");
+
+  const map = L.map("map", { zoomControl: true, attributionControl: true });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  const restLine = L.polyline(d.rest, { color: "#8a8f98", weight: 4, opacity: .8, dashArray: "6 6" }).addTo(map);
+  const passedLine = L.polyline(d.passed, { color: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2481cc", weight: 5 }).addTo(map);
+
+  const dot = (p, color, r, text) => p && L.circleMarker([p.lat, p.lon],
+    { radius: r, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map).bindPopup(text);
+  d.history.forEach(h => dot(h, "#f0a020", 5, `${esc(h.name)}<br>${esc(h.time)} МСК`));
+  dot(d.start, "#2e9e44", 7, `Отправление: ${esc(d.start && d.start.name)}`);
+  dot(d.end, "#d64545", 7, `Назначение: ${esc(d.end && d.end.name)}`);
+  const cur = dot(d.current, "#2481cc", 9, `Сейчас: ${esc(d.current && d.current.name)}`);
+
+  const bounds = L.featureGroup([restLine, passedLine]).getBounds();
+  if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+  else if (d.start) map.setView([d.start.lat, d.start.lon], 6);
+  if (cur) cur.openPopup();
+}
+main().catch(e => fail("Ошибка: " + e.message));
+</script>
+</body>
+</html>

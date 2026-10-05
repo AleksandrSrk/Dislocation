@@ -36,7 +36,8 @@ class StationNotFound(KeyError):
     pass
 
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
+MAX_END_GAP_KM = 50       # см. достройку концов участков ниже
 
 
 class Network:
@@ -67,11 +68,15 @@ class Network:
                 continue
             pts = [(code, ka) for code, _, ka, _ in s.rows]
             codes = {c for c, _ in pts}
+            # Конец из шапки достраиваем, только если он рядом с крайней перечисленной станцией.
+            # Иначе шапка указывает не на конец участка, а на дальний ориентир
+            # (пример: «Суховская — Мегет», вторая колонка «до ст. Тайшет» за 623 км).
             a = resolve(s.end_a, s.rows[0][0])
-            if a and a not in codes:
+            if a and a not in codes and s.rows[0][2] <= MAX_END_GAP_KM:
                 pts.append((a, 0))
             b = resolve(s.end_b, s.rows[-1][0])
-            if b and b not in codes and s.length is not None:
+            gap_b = s.rows[-1][3]
+            if b and b not in codes and s.length is not None and gap_b is not None and gap_b <= MAX_END_GAP_KM:
                 pts.append((b, s.length))
             pts.sort(key=lambda p: p[1])
             self.sections.append((s.kind, pts))

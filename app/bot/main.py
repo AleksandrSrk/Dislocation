@@ -14,7 +14,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
-                           KeyboardButton, Message, ReplyKeyboardMarkup, TelegramObject)
+                           KeyboardButton, Message, ReplyKeyboardMarkup, TelegramObject, WebAppInfo)
 
 from app import config
 from app.bot.parsing import parse_date, parse_datetime
@@ -264,7 +264,15 @@ async def finish_tracking(message: Message, state: FSMContext, operated_at: date
     st = compute_status(network, wb.from_code, wb.to_code, wb.accepted_at, wb.deadline,
                         data["station_code"], operated_at)
     text = format_status(network, wb.number, wb.from_code, wb.to_code, data["station_code"], operated_at, st)
-    await message.answer(text, reply_markup=MAIN_KB)
+    await message.answer(text, reply_markup=map_kb(wb.id) or MAIN_KB)
+
+
+def map_kb(waybill_id: int) -> InlineKeyboardMarkup | None:
+    """Кнопка Mini App с картой (если задан WEBAPP_URL)."""
+    if not config.WEBAPP_URL:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text="🗺 Карта", web_app=WebAppInfo(url=f"{config.WEBAPP_URL}?id={waybill_id}"))]])
 
 
 @router.callback_query(Track.time, F.data == "now")
