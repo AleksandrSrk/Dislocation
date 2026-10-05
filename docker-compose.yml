@@ -1,0 +1,10 @@
+services:
+  bot:
+    build: .
+    container_name: disloc_bot
+    command: python -m app.bot.main
+    env_file: .env
+    volumes:
+      - ./data:/app/data          # книга 1 ТР4, кэш графа, SQLite с накладными
+    restart: unless-stopped
+    mem_limit: 300m
